@@ -1,0 +1,91 @@
+podman run --name=mk-mysql -p3306:3306 -v mysql-volume:/var/lib/mysql -e MYSQL_ROOT_PASSWORD=my-secret-pw -d mysql/mysql-server:8.0.20
+
+
+CREATE TABLE movies(title VARCHAR(50) NOT NULL,genre VARCHAR(30) NOT NULL,director VARCHAR(60) NOT NULL,release_year INT NOT NULL,PRIMARY KEY(title));
+
+Verify that the table is created using the DESCRIBE command:
+
+ Insert movie information in column order
+
+INSERT INTO movies VALUE ("Joker", "psychological thriller", "Todd Phillips", 2019);
+
+
+
+creating the database in the container:
+
+[root@podman ~]#
+[root@podman ~]# podman run --name=mk-mysql -p3306:3306 -v /root/mysql:/var/lib/mysql/:Z -e MYSQL_ROOT_PASSWORD=my-secret-pw -d mysql/mysql-server           5df663962fb5a84960e41c7a6aaf995887d64b8aaa91579f008833a99a6f782b
+[root@podman ~]# podman ps
+CONTAINER ID  IMAGE                                COMMAND           CREATED        STATUS                       PORTS                   NAMES
+d9dade8f97ff  docker.io/library/nginx:latest       /bin/bash         9 hours ago    Up 9 hours ago                                       network2
+e09c1d46615e  docker.io/library/busybox:latest     sh                9 hours ago    Up 9 hours ago                                       killer
+731d700fcca8  docker.io/library/httpd:latest       httpd-foreground  6 hours ago    Up 6 hours ago               0.0.0.0:8080->8090/tcp  httpd2
+5df663962fb5  docker.io/mysql/mysql-server:latest  mysqld            7 seconds ago  Up 6 seconds ago (starting)  0.0.0.0:3306->3306/tcp  mk-mysql
+[root@podman ~]# podman exec -it 5df663962fb5
+Error: must provide a non-empty command to start an exec session: invalid argument
+[root@podman ~]# podman exec -it 5df663962fb5 /bin/bash
+bash-4.4# ls
+bin   dev                         entrypoint.sh  healthcheck.sh  lib    media  opt   root  sbin  sys  usr
+boot  docker-entrypoint-initdb.d  etc            home            lib64  mnt    proc  run   srv   tmp  var
+bash-4.4#
+bash-4.4#
+bash-4.4# cd /var/lib/mysql
+bash-4.4# ls
+'#ib_16384_0.dblwr'   auto.cnf        binlog.index      client-key.pem   ibtmp1      mysql.sock           public_key.pem    undo_001
+'#ib_16384_1.dblwr'   binlog.000001   ca-key.pem        hello            movies      mysql.sock.lock      server-cert.pem   undo_002
+'#innodb_redo'        binlog.000002   ca.pem            ib_buffer_pool   mysql       performance_schema   server-key.pem
+'#innodb_temp'        binlog.000003   client-cert.pem   ibdata1          mysql.ibd   private_key.pem      sys
+bash-4.4# cd movies/
+bash-4.4# ls
+movies.ibd
+bash-4.4# mysql -u root -p
+Enter password:
+Welcome to the MySQL monitor.  Commands end with ; or \g.
+Your MySQL connection id is 8
+Server version: 8.0.32 MySQL Community Server - GPL
+
+Copyright (c) 2000, 2023, Oracle and/or its affiliates.
+
+Oracle is a registered trademark of Oracle Corporation and/or its
+affiliates. Other names may be trademarks of their respective
+owners.
+
+Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+mysql> SHOW DATABASES;
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| movies             |
+| mysql              |
+| performance_schema |
+| sys                |
++--------------------+
+5 rows in set (0.14 sec)
+
+mysql> USE movies;
+Reading table information for completion of table and column names
+You can turn off this feature to get a quicker startup with -A
+
+Database changed
+mysql> SELECT * FROM movies;
++-------+------------------------+---------------+--------------+
+| title | genre                  | director      | release_year |
++-------+------------------------+---------------+--------------+
+| Joker | psychological thriller | Todd Phillips |         2019 |
++-------+------------------------+---------------+--------------+
+1 row in set (0.00 sec)
+
+mysql> DESCRIBE movies;
++--------------+-------------+------+-----+---------+-------+
+| Field        | Type        | Null | Key | Default | Extra |
++--------------+-------------+------+-----+---------+-------+
+| title        | varchar(50) | NO   | PRI | NULL    |       |
+| genre        | varchar(30) | NO   |     | NULL    |       |
+| director     | varchar(60) | NO   |     | NULL    |       |
+| release_year | int         | NO   |     | NULL    |       |
++--------------+-------------+------+-----+---------+-------+
+4 rows in set (0.04 sec)
+
+mysql>

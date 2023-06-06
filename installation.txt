@@ -1,0 +1,561 @@
+INSTALLATION OF BASTION NODE ON THE VMWARE EXI
+
+CREATING THE DNS CONFIGRATION IN THE BASTION
+Before starting the dns server configrations we need to check selinux status ,it should be disable
+we need to stop the firewalld service also
+[root@bastion ~] systemctl disable firewalld.service
+[root@bastion ~] systemctl stop firewalld.service
+[root@bastion ~] systemctl mask firewalld.service
+
+[root@bastion ~] yum install bind bind-utils* -y
+[root@bastion ~] 
+
+[root@bastion ~] vim /etc/named.conf
+
+[root@bastion ~]# cat /etc/named.conf
+//
+// named.conf
+//
+// Provided by Red Hat bind package to configure the ISC BIND named(8) DNS
+// server as a caching only nameserver (as a localhost DNS resolver only).
+//
+// See /usr/share/doc/bind*/sample/ for example named configuration files.
+//
+
+options {
+        listen-on port 53 { 127.0.0.1; any; };
+        listen-on-v6 port 53 { ::1; };
+        directory       "/var/named";
+        dump-file       "/var/named/data/cache_dump.db";
+        statistics-file "/var/named/data/named_stats.txt";
+        memstatistics-file "/var/named/data/named_mem_stats.txt";
+        secroots-file   "/var/named/data/named.secroots";
+        recursing-file  "/var/named/data/named.recursing";
+        allow-query     { localhost; any; };
+
+        /*
+         - If you are building an AUTHORITATIVE DNS server, do NOT enable recursion.
+         - If you are building a RECURSIVE (caching) DNS server, you need to enable
+           recursion.
+         - If your recursive DNS server has a public IP address, you MUST enable access
+           control to limit queries to your legitimate users. Failing to do so will
+           cause your server to become part of large scale DNS amplification
+           attacks. Implementing BCP38 within your network would greatly
+           reduce such attack surface
+        */
+        recursion yes;
+
+        dnssec-enable yes;
+        dnssec-validation yes;
+
+        managed-keys-directory "/var/named/dynamic";
+
+        pid-file "/run/named/named.pid";
+        session-keyfile "/run/named/session.key";
+
+        /* https://fedoraproject.org/wiki/Changes/CryptoPolicy */
+        include "/etc/crypto-policies/back-ends/bind.config";
+};
+
+logging {
+        channel default_debug {
+                file "data/named.run";
+                severity dynamic;
+        };
+};
+
+zone "." IN {
+        type hint;
+        file "named.ca";
+};
+zone "ocp48.example.local" IN {
+     type master;
+     file "forward.zone";
+     allow-update {none;};
+     allow-query {any;};
+};
+zone "0.168.192.in-addr.arpa" IN {
+     type master;
+     file "reverse.zone";
+     allow-update {none;};
+     allow-query {any;};
+};
+include "/etc/named.rfc1912.zones";
+include "/etc/named.root.key";
+
+[root@bastion ~] vim /var/named/forward.zone
+
+$TTL 1W
+@       IN      SOA     bastion.ocp48.example.local.       root (
+                        2019070700      ; serial
+                        3H              ; refresh (3 hours)
+                        30M             ; retry (30 minutes)
+                        2W              ; expiry (2 weeks)
+                        1W )            ; minimum (1 week)
+        IN      NS      bastion.ocp48.example.local.
+bastion.ocp48.example.local.    IN A    192.168.0.51
+
+bootstrap.ocp48.example.local.  IN A    192.168.0.52
+
+master0.ocp48.example.local.    IN A    192.168.0.53
+master1.ocp48.example.local.    IN A    192.168.0.54
+master2.ocp48.example.local.    IN A    192.168.0.55
+
+worker0.ocp48.example.local.    IN A    192.168.0.56
+worker1.ocp48.example.local.    IN A    192.168.0.57
+
+*.apps.ocp48.example.local.     IN A    192.168.0.51
+api.ocp48.example.local.                IN A    192.168.0.51
+api-int.ocp48.example.local.    IN A    192.168.0.51
+
+[root@bastion ~] vim /var/named/reverse.zone
+
+$TTL 1W
+@       IN      SOA     bastion.ocp48.example.local.       root (
+                        2019070700      ; serial
+                        3H              ; refresh (3 hours)
+                        30M             ; retry (30 minutes)
+                        2W              ; expiry (2 weeks)
+                        1W )            ; minimum (1 week)
+        IN      NS      bastion.ocp48.example.local.
+51.0.168.192.in-addr.arpa.      IN      PTR     bastion.ocp48.example.local.
+
+52.0.168.192.in-addr.arpa.      IN      PTR     bootstrap.ocp48.example.local.
+
+53.0.168.192.in-addr.arpa.      IN      PTR     master0.ocp48.example.local.
+54.0.168.192.in-addr.arpa.      IN      PTR     master1.ocp48.example.local.
+55.0.168.192.in-addr.arpa.      IN      PTR     master2.ocp48.example.local.
+
+56.0.168.192.in-addr.arpa.      IN      PTR     worker0.ocp48.example.local.
+57.0.168.192.in-addr.arpa.      IN      PTR     worker1.ocp48.example.local.
+
+51.0.168.192.in-addr.arpa.      IN      PTR     api.ocp48.example.local.
+51.0.168.192.in-addr.arpa.      IN      PTR     api-int.ocp48.example.local.
+
+[root@bastion ~]# chown named:named /var/named/forward.zone
+
+[root@bastion ~]# chown named:named /var/named/reverse.zone
+
+[root@bastion ~]# named-checkconf
+
+[root@bastion ~]# named-checkzone forward.zone /var/named/forward.zone
+output
+/var/named/forward.zone:9: ignoring out-of-zone data (bastion.ocp48.example.loca                                                                             l)
+/var/named/forward.zone:11: ignoring out-of-zone data (bootstrap.ocp48.example.l                                                                             ocal)
+/var/named/forward.zone:13: ignoring out-of-zone data (master0.ocp48.example.loc                                                                             al)
+/var/named/forward.zone:14: ignoring out-of-zone data (master1.ocp48.example.loc                                                                             al)
+/var/named/forward.zone:15: ignoring out-of-zone data (master2.ocp48.example.loc                                                                             al)
+/var/named/forward.zone:17: ignoring out-of-zone data (worker0.ocp48.example.loc                                                                             al)
+/var/named/forward.zone:18: ignoring out-of-zone data (worker1.ocp48.example.loc                                                                             al)
+/var/named/forward.zone:20: ignoring out-of-zone data (*.apps.ocp48.example.loca                                                                             l)
+/var/named/forward.zone:21: ignoring out-of-zone data (api.ocp48.example.local)
+/var/named/forward.zone:22: ignoring out-of-zone data (api-int.ocp48.example.loc                                                                             al)
+zone forward.zone/IN: loaded serial 2019070700
+OK
+
+[root@bastion ~]# named-checkzone 192.168.0.51 /var/named/reverse.zone
+output
+/var/named/reverse.zone:9: ignoring out-of-zone data (51.0.168.192.in-addr.arpa)
+/var/named/reverse.zone:11: ignoring out-of-zone data (52.0.168.192.in-addr.arpa                                                                             )
+/var/named/reverse.zone:13: ignoring out-of-zone data (53.0.168.192.in-addr.arpa                                                                             )
+/var/named/reverse.zone:14: ignoring out-of-zone data (54.0.168.192.in-addr.arpa                                                                             )
+/var/named/reverse.zone:15: ignoring out-of-zone data (55.0.168.192.in-addr.arpa                                                                             )
+/var/named/reverse.zone:17: ignoring out-of-zone data (56.0.168.192.in-addr.arpa                                                                             )
+/var/named/reverse.zone:18: ignoring out-of-zone data (57.0.168.192.in-addr.arpa                                                                             )
+/var/named/reverse.zone:20: ignoring out-of-zone data (51.0.168.192.in-addr.arpa                                                                             )
+/var/named/reverse.zone:21: ignoring out-of-zone data (51.0.168.192.in-addr.arpa                                                                             )
+zone 192.168.0.51/IN: loaded serial 2019070700
+OK
+
+[root@bastion ~]# systemctl restart named.service
+
+[root@bastion ~]# systemctl status named.service
+
+
+[root@bastion ~]# systemctl status named.service
+output
+● named.service - Berkeley Internet Name Domain (DNS)
+   Loaded: loaded (/usr/lib/systemd/system/named.service; enabled; vendor preset: disabled)
+   Active: active (running) since Tue 2023-02-21 12:33:48 IST; 47s ago
+  Process: 65599 ExecStop=/bin/sh -c /usr/sbin/rndc stop > /dev/null 2>&1 || /bin/kill -TERM $MAINPID (code=exited, status=0/SUCCESS)
+  Process: 65620 ExecStart=/usr/sbin/named -u named -c ${NAMEDCONF} $OPTIONS (code=exited, status=0/SUCCESS)
+  Process: 65615 ExecStartPre=/bin/bash -c if [ ! "$DISABLE_ZONE_CHECKING" == "yes" ]; then /usr/sbin/named-checkconf -z "$NAMEDCONF"; else echo "Checking o>
+ Main PID: 65621 (named)
+    Tasks: 7 (limit: 100911)
+   Memory: 24.9M
+   CGroup: /system.slice/named.service
+           └─65621 /usr/sbin/named -u named -c /etc/named.conf
+
+Error
+WHEN I DIG TO DOMIAN NAME IT SHOWED THE :
+ 
+[root@bastion ~]# nslookup bastion.ocp48.example.com
+Server:         192.168.0.1
+Address:        192.168.0.1#53
+
+** SERVER CAN'T FIND BASTION.OCP48.EXAMPLE.COM: NXDOMAIN
+
+[root@bastion ~]# dig bastion.ocp48.example.local
+
+; <<>> DiG 9.11.36-RedHat-9.11.36-5.el8_7.2 <<>> bastion.ocp48.example.local
+;; global options: +cmd
+;; Got answer:
+;; WARNING: .local is reserved for Multicast DNS
+;; You are currently testing what happens when an mDNS query is leaked to DNS
+;; ->>HEADER<<- opcode: QUERY, status: NXDOMAIN, id: 39742
+;; flags: qr rd ra; QUERY: 1, ANSWER: 0, AUTHORITY: 0, ADDITIONAL: 0
+
+;; QUESTION SECTION:
+;bastion.ocp48.example.local.   IN      A
+
+;; Query time: 5 msec
+;; SERVER: 192.168.0.1#53(192.168.0.1)
+;; WHEN: Tue Feb 21 13:20:29 IST 2023
+;; MSG SIZE  rcvd: 45
+
+
+WE NEED TO ADD THE ENTRY IN THE RESOLVE.CONF:
+		   
+[root@bastion ~]# cat /etc/resolv.conf
+
+# Generated by NetworkManager
+search ocp48.example.local
+search example.local
+nameserver 192.168.0.51
+Error resolved:
+[root@bastion ~]# dig  bastion.ocp48.example.local
+output
+
+; <<>> DiG 9.11.36-RedHat-9.11.36-5.el8_7.2 <<>> bastion.ocp48.example.local
+;; global options: +cmd
+;; Got answer:
+;; WARNING: .local is reserved for Multicast DNS
+;; You are currently testing what happens when an mDNS query is leaked to DNS
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 29225
+;; flags: qr aa rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 1, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+; COOKIE: 1ebfbec94c54cfb3269e6dae63f477fd0f554ee4a83222e6 (good)
+;; QUESTION SECTION:
+;bastion.ocp48.example.local.   IN      A
+
+;; ANSWER SECTION:
+bastion.ocp48.example.local. 604800 IN  A       192.168.0.51
+
+;; AUTHORITY SECTION:
+ocp48.example.local.    604800  IN      NS      bastion.ocp48.example.local.
+
+;; Query time: 0 msec
+;; SERVER: 192.168.0.51#53(192.168.0.51)
+;; WHEN: Tue Feb 21 13:21:25 IST 2023
+;; MSG SIZE  rcvd: 114
+
+[root@bastion ~]# dig +noall +answer @192.168.0.51 api.ocp48.example.local
+api.ocp48.example.local. 604800 IN      A       192.168.0.51
+
+[root@bastion ~]# dig +noall +answer @192.168.0.51 api-int.ocp48.example.local
+api-int.ocp48.example.local. 604800 IN  A       192.168.0.51
+
+[root@bastion ~]# dig +noall +answer @192.168.0.51 random.apps.ocp48.example.local
+random.apps.ocp48.example.local. 604800 IN A    192.168.0.51
+
+[root@bastion ~]# dig +noall +answer @192.168.0.51 console-openshift-console.apps.ocp48.example.local
+console-openshift-console.apps.ocp48.example.local. 604800 IN A 192.168.0.51
+
+[root@bastion ~]# dig +noall +answer @192.168.0.51 bootstrap.ocp48.example.local
+bootstrap.ocp48.example.local. 604800 IN A      192.168.0.52
+
+[root@bastion ~]# dig +noall +answer @192.168.0.51 -x 192.168.0.51
+51.0.168.192.in-addr.arpa. 604800 IN    PTR     api.ocp48.example.local.
+51.0.168.192.in-addr.arpa. 604800 IN    PTR     api-int.ocp48.example.local.
+51.0.168.192.in-addr.arpa. 604800 IN    PTR     bastion.ocp48.example.local.
+
+[root@bastion ~]# dig +noall +answer @192.168.0.51 -x 192.168.0.52
+52.0.168.192.in-addr.arpa. 604800 IN    PTR     bootstrap.ocp48.example.local.
+
+HAPROXY CONFIGRATION:
+[root@bastion ~]# yum install haproxy -y
+[root@bastion ~]# systemctl status haproxy.service
+[root@bastion ~]# systemctl enable haproxy.service
+[root@bastion ~]# systemctl start haproxy.service
+[root@bastion ~]# vim /etc/haproxy/haproxy.cfg
+global
+        log     127.0.0.1 local2
+        pidfile /var/run/haproxy.pid
+        maxconn 4000
+        daemon
+defaults
+        mode                    http
+        log                     global
+        option                  dontlognull
+        option  http-server-close
+        option                  redispatch
+        retries                 3
+        timeout http-request    10s
+        timeout queue           1m
+        timeout connect         10s
+        timeout client          1m
+        timeout server          1m
+        timeout http-keep-alive 10s
+        timeout check           10s
+        maxconn                 3000
+frontend stats
+        bind *:1936
+        mode            http
+        log             global
+        maxconn 10
+        stats enable
+        stats hide-version
+        stats refresh 30s
+        stats show-node
+        stats show-desc Stats for ocp48 cluster
+        stats auth admin: ocp48
+        stats uri /stats
+listen api-server-6443
+        bind *:6443
+        mode tcp
+        server bootstrap bootstrap.ocp48.example.local:6443 check inter 1s
+        server master0   master0.ocp48.example.local:6443   check inter 1s
+        server master1   master1.ocp48.example.local:6443   check inter 1s
+        server master2   master2.ocp48.example.local:6443   check inter 1s
+listen machine-config-server-22623
+        bind *:22623
+        mode tcp
+        server bootstrap bootstrap.ocp48.example.local:22623 check inter 1s
+        server master0   master0.ocp48.example.local:22623   check inter 1s
+        server master1   master1.ocp48.example.local:22623   check inter 1s
+        server master2   master2.ocp48.example.local:22623   check inter 1s
+listen ingress-router-443
+        bind *:443
+        mode tcp
+        balance source
+        server worker0 worker0.ocp48.example.local:443 check inter 1s
+        server worker1 worker1.ocp48.example.local:443 check inter 1s
+listen ingress-router-80
+        bind *:80
+        mode tcp
+        balance source
+        server worker0 worker0.ocp48.example.local:80 check inter 1s
+        server worker1 worker1.ocp48.example.local:80 check inter 1s
+
+[root@bastion ~]# systemctl status haproxy.service
+
+● haproxy.service - HAProxy Load Balancer
+   Loaded: loaded (/usr/lib/systemd/system/haproxy.service; enabled; vendor preset: disabled)
+   Active: active (running) since Tue 2023-02-21 16:44:56 IST; 35min ago
+  Process: 11664 ExecStartPre=/usr/sbin/haproxy -f $CONFIG -f $CFGDIR -c -q $OPTIONS (code=exited, status=0/SUCCESS)
+ Main PID: 11667 (haproxy)
+    Tasks: 2 (limit: 100911)
+   Memory: 3.0M
+   CGroup: /system.slice/haproxy.service
+           ├─11667 /usr/sbin/haproxy -Ws -f /etc/haproxy/haproxy.cfg -f /etc/haproxy/conf.d -p /run/haproxy.pid
+           └─11669 /usr/sbin/haproxy -Ws -f /etc/haproxy/haproxy.cfg -f /etc/haproxy/conf.d -p /run/haproxy.pid
+		   
+		   
+GENERATING SSH KEY:
+
+[root@bastion ~]# ssh-keygen -t ed25519 -N '' -f ~/.ssh/id_ed25519
+Generating public/private ed25519 key pair.
+Created directory '/root/.ssh'.
+Your identification has been saved in /root/.ssh/id_ed25519.
+Your public key has been saved in /root/.ssh/id_ed25519.pub.
+The key fingerprint is:
+SHA256:CbIyOvRHxq7kQryMbvS2GuMaQFtlQ/Yvt18xM7ipUbs root@bastion.ocp48.example.local
+The key's randomart image is:
++--[ED25519 256]--+
+|    .*           |
+|    + o          |
+| . .. ..         |
+|. o .o ...  .    |
+|ooo .+ .So o =   |
+|o=.o+   o o + =  |
+|Oooo o   o + .   |
+|oB=oo     + o    |
+|=+++.    . E     |
++----[SHA256]-----+
+
+[root@bastion ~]# cd .ssh
+[root@bastion .ssh]#
+[root@bastion .ssh]#
+[root@bastion .ssh]# ls
+id_ed25519  id_ed25519.pub
+[root@bastion .ssh]#
+[root@bastion .ssh]#
+[root@bastion .ssh]#
+[root@bastion .ssh]# cat id_ed25519.pub
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGOW9GaCi+sjY34U5ed5tj+uJIFGrzk5cLRV7GD13Pcn root@bastion.ocp48.example.local
+
+[root@bastion ~]# eval "$(ssh-agent -s)"
+Agent pid 20993
+
+
+[root@bastion ~]# ssh-add ~/.ssh/id_ed25519
+Identity added: /root/.ssh/id_ed25519 (root@bastion.ocp48.example.local)
+
+Obtaining the installation program:
+
+Before you install OpenShift Container Platform, download the installation file on a local computer.
+link: https://mirror.openshift.com/pub/openshift-v4/clients/ocp/4.8.0/
+
+[root@bastion ~]# ls
+ anaconda-ks.cfg   Documents   initial-setup-ks.cfg  'openshift-install-linux (1).tar.gz'   Public      Videos
+ Desktop           Downloads   Music                  Pictures                              Templates
+
+
+[root@bastion ~]# tar -xvf openshift-install-linux\ \(1\).tar.gz
+README.md
+openshift-install
+
+Installing the OpenShift CLI by downloading the binary:
+
+You can install the OpenShift CLI (oc) to interact with OpenShift Container Platform from a command-line interface.
+
+Installing the OpenShift CLI on Linux:
+link:https://access.redhat.com/downloads/content/290
+
+[root@bastion ~]# tar -xvzf oc-4.12.4-linux.tar.gz
+README.md
+kubectl
+oc
+[root@bastion ~]# ls
+ anaconda-ks.cfg   Downloads              Music                    openshift-install                     Public                 Templates
+ Desktop           initial-setup-ks.cfg   oc                      'openshift-install-linux (1).tar.gz'  'pull-secret (2).txt'   Videos
+ Documents         kubectl                oc-4.12.4-linux.tar.gz   Pictures                              README.md              wget-log
+[root@bastion ~]#
+
+
+[root@bastion ~]# ls
+ anaconda-ks.cfg   Downloads              oc-4.12.4-linux.tar.gz                Pictures               README.md   wget-log
+ Desktop           initial-setup-ks.cfg   openshift-install                     Public                 Templates
+ 
+ WE NEED DOWNLOAD THE PULL-SECRET:
+ Link: https://console.redhat.com/openshift/install/pull-secret
+ 
+ TO CHECK YOUR PATH, EXECUTE THE FOLLOWING COMMAND:
+ [root@bastion ~]# echo $PATH
+/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/root/bin
+
+After you install the OpenShift CLI, it is available using the oc command
+
+MANUALLY CREATING THE INSTALLATION CONFIGURATION FILE:
+Create an installation directory to store your required installation assets in:
+[root@bastion ~]# mkdir ocpinstall48
+
+Customize the sample install-config.yaml file template that is provided and save it in the directory ocpinstall48
+
+
+INSTALLATION CONFIGURATION PARAMETERS:
+[root@bastion ~]# cd ocpinstall48/
+[root@bastion ocpinstall48]# vim install-config.yaml
+       apiVersion: v1
+baseDomain: example.local
+compute: 
+- hyperthreading: Enabled 
+  name: worker
+  replicas: 0 
+controlPlane: 
+  hyperthreading: Enabled 
+  name: master
+  replicas: 3 
+metadata:
+  name: ocp48 
+networking:
+  clusterNetwork:
+  - cidr: 10.128.0.0/14 
+    hostPrefix: 23 
+  networkType: OpenShiftSDN
+  serviceNetwork: 
+  - 172.30.0.0/16
+platform:
+  none: {} 
+fips: false 
+pullSecret: '{"auths": ...}' 
+sshKey: 'ssh-ed25519 AAAA...' 
+
+CREATING THE KUBERNETES MANIFEST AND IGNITION CONFIG FILES:
+
+[root@bastion ~]# ./openshift-install create manifests --dir ocpinstall48/
+INFO Consuming Install Config from target directory
+WARNING Making control-plane schedulable by setting MastersSchedulable to true f                                                                             or Scheduler cluster settings
+INFO Manifests created in: ocpinstall48/manifests and ocpinstall48/openshift
+
+[root@bastion ocpinstall48]# ls
+manifests  openshift
+
+[root@bastion ~]# ./openshift-install create ignition-configs --dir ocpinstall48                                                                             /
+INFO Consuming Openshift Manifests from target directory
+INFO Consuming OpenShift Install (Manifests) from target directory
+INFO Consuming Worker Machines from target directory
+INFO Consuming Common Manifests from target directory
+INFO Consuming Master Machines from target directory
+INFO Ignition-Configs created in: ocpinstall48 and ocpinstall48/auth
+
+[root@bastion ~]# tree ocpinstall48/
+ocpinstall48/
+├── auth
+│   ├── kubeadmin-password
+│   └── kubeconfig
+├── bootstrap.ign
+├── master.ign
+├── metadata.json
+└── worker.ign
+
+[root@bastion ocpinstall48]# ls
+auth  bootstrap.ign  master.ign  metadata.json  worker.ign
+
+YOU HAVE AN HTTP SERVER THAT CAN BE ACCESSED FROM YOUR COMPUTER, AND FROM THE MACHINES THAT YOU CREATE.
+
+[root@bastion ~]# sha512sum ocpinstall48/bootstrap.ign
+  927ef3454846ea4a9c85ac997c73c23a486f5d6186dfcb776b76d04bb2454414c44897ac3bf332c5a1bb7167cdfe3b86592ad20f2d0932eeabed94cf4e420ff8  ocp48install/bootstrap.ign
+
+[root@bastion ~]# systemctl status httpd.service
+
+[root@bastion ocpinstall48]#
+[root@bastion ocpinstall48]# mv bootstrap.ign master.ign worker.ign /var/www/html
+
+[root@bastion html]# ls -lZ
+total 284
+-rwxrwxrwx 1 root root ? 279837 Feb 22 11:05 bootstrap.ign
+-rwxrwxrwx 1 root root ?   1719 Feb 22 11:05 master.ign
+-rwxrwxrwx 1 root root ?   1719 Feb 22 11:05 worker.ign
+
+
+
+[root@bastion html]# curl  http://192.168.0.51:8080/bootstrap.ign
+{"ignition":{"version":"3.2.0"},"passwd":{"users":[{"name":"core","sshAuthorizedKeys":["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGOW9GaCi+sjY34U5ed5tj+uJIFGrzk5cLRV7GD13Pcn root@bastion.ocp48.example.local","ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC7z4QjMeMKGr1LGYdGeuPuqq4P6fWg9ey9pN0/HSxG+m4qalSkkEBodTWZ6CJRCVPMbAytuQHuzANs0f73iguMSUENr+j69ROO72RydolOr6ZEeWiBg9x89nP5cR8d+Mk0NA1kI6nIdmkIzQb8iE0HyVgLt80swJHdUdZ7rqEbqbpKY4x6TrM7MKqwnlSbEKFl4qZNbw0StebPD5YCyfaDRfcpVPrvXpCvhTZb7i1cluvODw6oUwavBcVIny3Hg2KP+XtCW0hTnl8il5VfdGs6judbP4Ts4hkeDTL/qw/tT3GlZtBbw0r30mpq6zu3jSzrFK4SFedAju40i4gm9BPF\n"]}]},"storage":{"files":[{"overwrite":true,"path":"/etc/containers/registries.conf","user":{"name":"root"},"contents":{"source":"data:text/plain;charset=utf-8;base64,"},"mode":384},{"overwrite":true,"path":"/etc/ignition-machine-config-encapsulated.json","user":{"name":"root"},"contents":{"source":"data:text/plain;charset=utf-8;base64,ewogICJtZXRhZGF0YSI6IHsKICAgICJuYW1lIjogImJvb3RzdHJhcC1maXBzIgogIH0sCiAgInNwZWMiOiB7CiAgICAiY29uZmlnIjogewogICAgICAiaWduaXRpb24iOiB7CiAgICAgICAgInZlcnNpb24iOiAiMy4xLjAiCiAgICAgIH0KICAgIH0sCiAgICAia2VybmVsQXJndW1lbnRzIjogW10sCiAgICAiZmlwcyI6IGZhbHNlCiAgfQp9Cg=="},"mode":384},
+
+
+[root@bastion ~]# sudo coreos-installer install --copy-network --ignition-url=http://192.168.0.51/bootstrap.ign /dev/sda --insecure-ignition
+
+[root@bootstrap ~]# crictl ps
+CONTAINER           IMAGE                                                                                                                    CREATED              STATE               NAME                        ATTEMPT             POD ID
+f65d53bf2bc3a       quay.io/openshift-release-dev/ocp-release@sha256:31c7741fc7bb73ff752ba43f5acf014b8fadd69196fc522241302de918066cb1        25 seconds ago       Running             cluster-version-operator    0                   2155c73dffbc1
+058d4663687bc       2713b51902e9971d2c02112419d8cc7e0c83e3b28a96b9932075b26500d4a81b                                                         27 seconds ago       Running             cloud-credential-operator   0                   33f9d1b85e458
+4db41edf527f0       32123307c03238150f230d4e895a31582f9c1c4ef4cc2623372fb1cb3fd17072                                                         About a minute ago   Running             machine-config-server       0                   4026cecd65418
+c6d42edddbeb7       7f193ce191e414cf78fcdb0d7a163aaf079049a02aa800f8305b255f687c7547                                                         2 minutes ago        Running             etcd                        0                   e4763a3ae2ac2
+ed6a18b1648fc       quay.io/openshift-release-dev/ocp-v4.0-art-dev@sha256:2d1371d52c5233f6daf04aa0b0c12f29799155c15b49031bd9581d78529742b2   2 minutes ago        Running             etcdctl                     0                   e4763a3ae2ac2
+
+[root@bootstrap ~]# netstat -ntlup|grep 22623
+tcp6       0      0 :::22623                :::*                    LISTEN      6242/machine-config
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

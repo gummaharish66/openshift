@@ -1,0 +1,103 @@
+Important points:
+--------------Persistent Storage-----------------
+1.Containers have ephemeral storage by default
+2.To preserve the files, containers offer two main ways of maintaining persistent storage: volumes and bind mounts.
+3.OpenShift cluster administrators use the Kubernetes persistent volume framework to manage persistent storage for the users of a cluster. 
+4.A persistent volume claim (PVC) belongs to a specific project.
+5.To create a PVC, you must specify the access mode and size, among other options.
+6.Once created, a PVC cannot be shared between projects.
+7.Persistent volumes are not exclusive to projects and are accessible across the entire OpenShift cluster.
+8.When a persistent volume binds to a persistent volume claim, the persistent volume cannot be bound to another persistent volume claim.
+
+-----------Persistent Volume and Persistent Volume Claim Lifecycle---------------
+1.Persistent volume claims request persistent volume resources
+2.PV must provide the access mode specified in the PVC and it must be at least as large as the size requested in the PVC.
+3. If a PVC cannot find a PV that matches all criteria, the PVC enters a pending state and waits until an appropriate PV becomes available.
+4.A bound persistent volume can be mounted as a volume to a specific mount point in the pod (for example, /var/lib/pgsql for a PostgreSQL database).
+
+-------------------Verifying the Dynamic Provisioned Storage---------------------
+
+[user@host ~]$ oc get storageclass
+NAME                    PROVISIONER               ...
+nfs-storage (default)   nfs-storage-provisioner   ...
+
+1.Use the oc get storageclass command to view available storage classes. 
+The output identifies the default storage class. If a storage class exists,then persistent volumes are created dynamically to match persistent volume claims.
+2.Create the persistent volume claim using either a Kubernetes manifest or the oc set volumes command.
+3. you can have a PVC with RWO requesting a NFS PV, and it can be matched because NFS supports RWO, but this can not happen in reverse, and the request will remain in the pending status.
+
+------------------------Deploying Dynamically Provisioned Storage------------------------
+-------------------
+To add a volume to an application create a PersistentVolumeClaim resource and add it to the application as a volume
+
+[user@host ~]$ oc set volumes deployment/example-application \
+>   --add --name example-pv-storage --type pvc --claim-class nfs-storage \
+>   --claim-mode rwo --claim-size 15Gi --mount-path /var/lib/example-app 
+>   --claim-name example-pv-claim
+
+----------------Deleting Persistent Volume Claims-------------------------------
+
+To delete a volume, use the oc delete command to delete the persistent volume claim. The storage class will reclaim the volume after the PVC is removed
+
+[user@host ~]$ oc delete pvc/example-pvc-storage
+
+-------------Create a new project named install-storage.------------
+
+[student@workstation ~]$ oc new-project install-storage
+
+---------------Verify the default storage class.------------------------
+
+[student@workstation ~]$ oc get storageclass
+
+---------Create a new database deployment using the container image located at registry.redhat.io/rhel8/postgresql-13:1-7.----------------
+
+[student@workstation ~]$ oc new-app --name postgresql-persistent \
+>   --image registry.redhat.io/rhel8/postgresql-13:1-7 \
+>   -e POSTGRESQL_USER=redhat \
+>   -e POSTGRESQL_PASSWORD=redhat123 \
+>   -e POSTGRESQL_DATABASE=persistentdb
+
+------------------Verify that you successfully created the new PVC.-------------------
+
+[student@workstation ~]$ oc get pvc
+
+-------------Verify that you successfully created the new PV.--------------
+
+[student@workstation ~]$ oc get pv \
+>   -o custom-columns=NAME:.metadata.name,CLAIM:.spec.claimRef.name
+
+-----------------Delete all resources that contain the app=postgresql-persistent label.--------------
+
+[student@workstation install-storage]$ oc delete all -l app=postgresql-persistent
+
+------------Create the postgresql-persistent2 deployment with the same initialization data as the postgresql-persistent deployment.=------
+
+[student@workstation install-storage]$ oc new-app --name postgresql-persistent2 \
+>   --image registry.redhat.io/rhel8/postgresql-13:1-7 \
+>   -e POSTGRESQL_USER=redhat \
+>   -e POSTGRESQL_PASSWORD=redhat123 \
+>   -e POSTGRESQL_DATABASE=persistentdb
+
+-----------------Add the existing postgresql-storage persistent volume claim to the postgresql-persistent2 deployment.--------------------------
+
+
+---------------Remove the postgresql-persistent2 deployment and the persistent volume claim.----------------------
+
+Delete all resources that contain the app=postgresql-persistent2 label.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

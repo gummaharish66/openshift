@@ -1,0 +1,312 @@
+-------------------------
+ INSTALLING PODMAN
+-------------------------
+To install podman on a RHEL8.4 server system
+[root@podman ~]# yum install podman -y
+
+--------------------------------------
+FIRST WE NEED CHECK THE PODMAN VERSION
+--------------------------------------
+[root@podman ~]# podman --version
+podman version 4.0.2
+
+[root@podman ~]# podman search httpd
+NAME                                                                         DESCRIPTION
+registry.fedoraproject.org/f29/httpd
+registry.access.redhat.com/rhscl/httpd-24-rhel7                              Apache HTTP 2.4 Server
+registry.access.redhat.com/cloudforms46-beta/cfme-openshift-httpd            CloudForms is a management and automation platform for virtual, private, and hybrid cloud infrastructures. This image provides a Web Server in a multi-pod CloudForms OpenShift deployment.
+registry.access.redhat.com/ubi8/httpd-24                                     Platform for running Apache httpd 2.4 or building httpd-based application
+---------------------------------------------
+PULLING A CONTANIER IMAGE TO THE LOCAL SYSTEM 
+---------------------------------------------
+
+[root@podman ~]# podman pull httpd
+✔ docker.io/library/httpd:latest
+Trying to pull docker.io/library/httpd:latest...
+Getting image source signatures
+Copying blob 8740c948ffd4 done
+Copying blob ec2ee6bdcb58 done
+Copying blob 70698c657149 done
+Copying blob 00df85967755 done
+Copying blob 8b4456c99d44 done
+Copying config 6e794a4832 done
+Writing manifest to image destination
+Storing signatures
+6e794a4832588ca05865700da59a3d333e7daaaf0544619e7f326eed7e72c903
+-------------------------------
+LIST LOCAL CONTAINER IMAGES  
+-------------------------------
+[root@podman ~]# podman images
+REPOSITORY               TAG         IMAGE ID      CREATED      SIZE
+docker.io/library/httpd  latest      6e794a483258  2 weeks ago  149 MB
+--------------------------------
+RUNNING A THE CONTAINER IMAGES
+---------------------------------
+
+[root@podman ~]# podman run -dt --name todayimage 6e794a483258
+53a3401e9153140eb1f28d221ed75f46b910c43d1fdab3627bed4a119e7904b4
+
+------------------------------------
+CHECKING THE RUNNING CONTAINERS
+-------------------------------------
+
+[root@podman ~]# podman ps
+CONTAINER ID  IMAGE                           COMMAND           CREATED         STATUS            PORTS       NAMES
+53a3401e9153  docker.io/library/httpd:latest  httpd-foreground  10 seconds ago  Up 9 seconds ago              todayimage
+
+[root@podman ~]# podman exec -it 53a3401e9153 /bin/bash
+root@53a3401e9153:/usr/local/apache2#
+root@53a3401e9153:/usr/local/apache2# ls
+bin  build  cgi-bin  conf  error  htdocs  icons  include  logs  modules
+
+[root@podman ~]# podman ps
+CONTAINER ID  IMAGE                           COMMAND           CREATED        STATUS            PORTS       NAMES
+53a3401e9153  docker.io/library/httpd:latest  httpd-foreground  2 minutes ago  Up 2 minutes ago              todayimage
+----------------------------------------------------
+LIST CONTAINERS THAT ARE RUNNING OR HAVE EXITED 
+----------------------------------------------------
+[root@podman ~]# podman ps -a
+CONTAINER ID  IMAGE                           COMMAND           CREATED        STATUS            PORTS       NAMES
+53a3401e9153  docker.io/library/httpd:latest  httpd-foreground  2 minutes ago  Up 2 minutes ago              todayimage
+
+[root@podman ~]# podman stop 53a3401e9153
+53a3401e9153
+
+[root@podman ~]# podman ps
+CONTAINER ID  IMAGE       COMMAND     CREATED     STATUS      PORTS       NAMES
+
+[root@podman ~]# podman ps -a
+CONTAINER ID  IMAGE                           COMMAND           CREATED        STATUS                     PORTS       NAMES
+53a3401e9153  docker.io/library/httpd:latest  httpd-foreground  3 minutes ago  Exited (0) 18 seconds ago              todayimage
+-----------------------------
+CREATING THE DOCKERFILE
+-----------------------------
+
+[root@podman ~]# cat Dockerfile
+FROM ubi7
+MAINTAINER gumma harish
+RUN yum install httpd -y
+RUN echo "Hello world" > /var/www/html/index.html
+EXPOSE 8085
+CMD ["httpd", "-D", "FOREGROUND"]
+--------------------------------------
+BULID A CONTAINER
+-------------------------------------
+
+[root@podman ~]# podman build -t ubi7 .
+STEP 1/6: FROM ubi7
+Resolved "ubi7" as an alias (/etc/containers/registries.conf.d/001-rhel-shortnames.conf)
+Trying to pull registry.access.redhat.com/ubi7:latest...
+Getting image source signatures
+Checking if image destination supports signatures
+Copying blob 7597778323f6 done
+Copying config f0c1470d8c done
+Writing manifest to image destination
+Storing signatures
+STEP 2/6: MAINTAINER gumma harish
+--> 74e8ee807a7
+STEP 3/6: RUN yum install httpd -y
+Loaded plugins: ovl, product-id, search-disabled-repos, subscription-manager
+
+This system is not receiving updates. You can use subscription-manager on the host to register and assign subscriptions.
+
+Resolving Dependencies
+--> Running transaction check
+---> Package httpd.x86_64 0:2.4.6-98.el7_9.6 will be installed
+--> Processing Dependency: httpd-tools = 2.4.6-98.el7_9.6 for package: httpd-2.4.6-98.el7_9.6.x86_64
+--> Processing Dependency: system-logos >= 7.92.1-1 for package: httpd-2.4.6-98.el7_9.6.x86_64
+--> Processing Dependency: /etc/mime.types for package: httpd-2.4.6-98.el7_9.6.x86_64
+--> Processing Dependency: libapr-1.so.0()(64bit) for package: httpd-2.4.6-98.el7_9.6.x86_64
+--> Processing Dependency: libaprutil-1.so.0()(64bit) for package: httpd-2.4.6-98.el7_9.6.x86_64
+--> Running transaction check
+---> Package apr.x86_64 0:1.4.8-7.el7 will be installed
+---> Package apr-util.x86_64 0:1.5.2-6.el7 will be installed
+---> Package httpd-tools.x86_64 0:2.4.6-98.el7_9.6 will be installed
+---> Package mailcap.noarch 0:2.1.41-2.el7 will be installed
+---> Package redhat-logos.noarch 0:70.7.0-1.el7 will be installed
+--> Finished Dependency Resolution
+
+Dependencies Resolved
+
+================================================================================
+ Package             Arch          Version                   Repository    Size
+================================================================================
+Installing:
+ httpd               x86_64        2.4.6-98.el7_9.6          ubi-7        1.2 M
+Installing for dependencies:
+ apr                 x86_64        1.4.8-7.el7               ubi-7        104 k
+ apr-util            x86_64        1.5.2-6.el7               ubi-7         92 k
+ httpd-tools         x86_64        2.4.6-98.el7_9.6          ubi-7         94 k
+ mailcap             noarch        2.1.41-2.el7              ubi-7         31 k
+ redhat-logos        noarch        70.7.0-1.el7              ubi-7         13 M
+
+Transaction Summary
+================================================================================
+Install  1 Package (+5 Dependent packages)
+
+Total download size: 15 M
+Installed size: 18 M
+Downloading packages:
+warning: /var/cache/yum/x86_64/7Server/ubi-7/packages/apr-1.4.8-7.el7.x86_64.rpm: Header V3 RSA/SHA256 Signature, key ID fd431d51: NOKEY
+Public key for apr-1.4.8-7.el7.x86_64.rpm is not installed
+--------------------------------------------------------------------------------
+Total                                              4.2 MB/s |  15 MB  00:03
+Retrieving key from file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+Importing GPG key 0xFD431D51:
+ Userid     : "Red Hat, Inc. (release key 2) <security@redhat.com>"
+ Fingerprint: 567e 347a d004 4ade 55ba 8a5f 199e 2f91 fd43 1d51
+ Package    : redhat-release-server-7.9-6.el7_9.x86_64 (@anaconda/7.9)
+ From       : /etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+Importing GPG key 0x2FA658E0:
+ Userid     : "Red Hat, Inc. (auxiliary key) <security@redhat.com>"
+ Fingerprint: 43a6 e49c 4a38 f4be 9abf 2a53 4568 9c88 2fa6 58e0
+ Package    : redhat-release-server-7.9-6.el7_9.x86_64 (@anaconda/7.9)
+ From       : /etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+Running transaction check
+Running transaction test
+Transaction test succeeded
+Running transaction
+  Installing : apr-1.4.8-7.el7.x86_64                                       1/6
+  Installing : apr-util-1.5.2-6.el7.x86_64                                  2/6
+  Installing : httpd-tools-2.4.6-98.el7_9.6.x86_64                          3/6
+  Installing : redhat-logos-70.7.0-1.el7.noarch                             4/6
+  Installing : mailcap-2.1.41-2.el7.noarch                                  5/6
+  Installing : httpd-2.4.6-98.el7_9.6.x86_64                                6/6
+  Verifying  : httpd-2.4.6-98.el7_9.6.x86_64                                1/6
+  Verifying  : httpd-tools-2.4.6-98.el7_9.6.x86_64                          2/6
+  Verifying  : mailcap-2.1.41-2.el7.noarch                                  3/6
+  Verifying  : apr-1.4.8-7.el7.x86_64                                       4/6
+  Verifying  : apr-util-1.5.2-6.el7.x86_64                                  5/6
+  Verifying  : redhat-logos-70.7.0-1.el7.noarch                             6/6
+
+Installed:
+  httpd.x86_64 0:2.4.6-98.el7_9.6
+
+Dependency Installed:
+  apr.x86_64 0:1.4.8-7.el7                   apr-util.x86_64 0:1.5.2-6.el7
+  httpd-tools.x86_64 0:2.4.6-98.el7_9.6      mailcap.noarch 0:2.1.41-2.el7
+  redhat-logos.noarch 0:70.7.0-1.el7
+
+Complete!
+--> 2cbb2c32089
+STEP 4/6: RUN echo "Hello world" > /var/www/html/index.html
+--> f4e267984d2
+STEP 5/6: EXPOSE 8085
+--> 15953bece3b
+STEP 6/6: CMD ["httpd", "-D", "FOREGROUND"]
+COMMIT ubi7
+--> 7605d5233f5
+Successfully tagged registry.access.redhat.com/ubi7:latest
+7605d5233f54a2c459188a93b7e9542e0bf252053646ee030d6dc43e5ae13913
+
+[root@podman ~]# podman images
+REPOSITORY                       TAG         IMAGE ID      CREATED             SIZE
+registry.access.redhat.com/ubi7  latest      7605d5233f54  About a minute ago  257 MB
+-------------------------------------------
+PUSHING THE IMAGE TO THE QUAY.iO REPOSITORY
+-------------------------------------------
+
+[root@podman ~]# podman push 7605d5233f54 quay.io/gummaharish66/httpd
+Getting image source signatures
+Copying blob 004f8c3f54bc done
+Copying blob ac40fbf2c07d done
+Copying blob a6d542167482 done
+Copying config 7605d5233f done
+Writing manifest to image destination
+Storing signatures
+---------------------------------------------
+PORT MAPPING
+----------------------------------------------
+
+
+[root@podman ~]# podman run -dt --name newlyimage -p 8080:8090 7605d5233f54
+6ec0fd6ae7192d4d7cd834e9872c2bdc20b0f0fee11e99ce808f4450c90370fc
+
+[root@podman ~]# podman ps
+CONTAINER ID  IMAGE                                   COMMAND               CREATED         STATUS             PORTS                   NAMES
+6ec0fd6ae719  registry.access.redhat.com/ubi7:latest  httpd -D FOREGROU...  13 seconds ago  Up 13 seconds ago  0.0.0.0:8080->8090/tcp  newlyimage
+
+
+[root@podman ~]# podman exec -it 6ec0fd6ae719 /bin/bash
+[root@6ec0fd6ae719 /]#
+
+[root@6ec0fd6ae719 ~]# cd /var/www/html/
+[root@6ec0fd6ae719 html]# cat index.html
+Hello world
+--------------------------------
+PODMAN INSPECT
+---------------------------------
+[root@podman ~]# podman inspect 6ec0fd6ae719 | grep "IPA"
+               "IPAddress": "10.88.0.6",
+                         "IPAddress": "10.88.0.6",
+                         "IPAMConfig": null,
+
+---------------------------------
+CREATING PERSISTENT VOLUME
+----------------------------------
+[root@podman ~]# mkdir volume1
+[root@podman ~]#
+[root@podman ~]#
+[root@podman ~]# ls
+anaconda-ks.cfg  Desktop  Dockerfile  Documents  Downloads  initial-setup-ks.cfg  Music  Pictures  Public  Templates  Videos  volume1
+
+[root@podman ~]# podman run -d --name newbuild -v /root/volume1:/mnt/:Z 7605d5233f54
+6ad40b6ec5af508958f0a474d0178fd32f3230a8cc7efcc1792c56d7e2746fc2
+
+[root@podman ~]# podman ps
+CONTAINER ID  IMAGE                                   COMMAND               CREATED         STATUS             PORTS       NAMES
+6ad40b6ec5af  registry.access.redhat.com/ubi7:latest  httpd -D FOREGROU...  20 seconds ago  Up 20 seconds ago              newbuild
+
+[root@podman ~]# podman exec -it 6ad40b6ec5af /bin/bash
+[root@6ad40b6ec5af /]#
+[root@6ad40b6ec5af /]# ls
+bin  boot  dev  etc  home  lib  lib64  media  mnt  opt  proc  root  run  sbin  srv  sys  tmp  usr  var
+
+-------------------------------------
+INSIDE THE CONTAINER
+-------------------------------------
+[root@6ad40b6ec5af /]# cd mnt
+[root@6ad40b6ec5af mnt]# ls
+[root@6ad40b6ec5af mnt]# touch hello
+[root@6ad40b6ec5af mnt]# touch file{1..5}
+[root@6ad40b6ec5af mnt]# ls
+file1  file2  file3  file4  file5  hello
+
+-------------------------------
+OUTSIDE THE CONTAINER
+--------------------------------
+[root@podman ~]# cd volume1/
+[root@podman volume1]# ls
+file1  file2  file3  file4  file5  hello
+[root@podman volume1]# touch hello{1..9}
+[root@podman volume1]# ls
+file1  file3  file5  hello1  hello3  hello5  hello7  hello9
+file2  file4  hello  hello2  hello4  hello6  hello8
+[root@podman volume1]#
+
+[root@6ad40b6ec5af mnt]# ls
+file1  file2  file3  file4  file5  hello  hello1  hello2  hello3  hello4  hello5  hello6  hello7  hello8  hello9
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
